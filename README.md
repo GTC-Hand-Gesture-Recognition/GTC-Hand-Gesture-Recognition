@@ -115,5 +115,3 @@ These metrics demonstrate the model's high accuracy in recognizing ASL alphabet 
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
-
-
