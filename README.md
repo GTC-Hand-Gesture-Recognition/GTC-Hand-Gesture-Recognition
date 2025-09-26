@@ -111,7 +111,3 @@ These metrics demonstrate the model's high accuracy in recognizing ASL alphabet 
 - Integration with accessibility tools
 - Cloud deployment with scalable infrastructure
 - Model optimization for edge devices
-
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
