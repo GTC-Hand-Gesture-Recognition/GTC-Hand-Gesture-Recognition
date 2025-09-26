@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Camera, Upload, AlertCircle, Wifi, WifiOff } from 'lucide-react';
+import { Camera, Upload, AlertCircle, Wifi, WifiOff, Play, Square } from 'lucide-react';
 import { apiService } from '../services/api';
 
 interface GestureDetectorProps {
@@ -14,16 +14,49 @@ export const GestureDetector: React.FC<GestureDetectorProps> = ({ onGestureDetec
   const [isStreamActive, setIsStreamActive] = useState(false);
   const [error, setError] = useState<string>('');
   const [currentGesture, setCurrentGesture] = useState<string>('');
-  const [gestureHoldTime, setGestureHoldTime] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [backendStatus, setBackendStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
   const [predictionHistory, setPredictionHistory] = useState<string[]>([]);
   const [isBuilding, setIsBuilding] = useState(false);
+  const [isAutoCapture, setIsAutoCapture] = useState(false); // New state for auto capture
+  const [captureInterval, setCaptureInterval] = useState<number>(1000); // Capture every 1 second
+  
+  // Ref for the auto capture interval
+  const autoCaptureIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Check backend connection on component mount
   useEffect(() => {
     checkBackendConnection();
   }, []);
+  
+  // Auto-capture effect
+  useEffect(() => {
+    if (isAutoCapture && isStreamActive && backendStatus === 'connected') {
+      // Start auto-capture interval
+      autoCaptureIntervalRef.current = setInterval(() => {
+        if (!isProcessing) { // Only capture if not currently processing
+          const imageData = captureImageFromVideo();
+          if (imageData) {
+            handlePrediction(imageData);
+          }
+        }
+      }, captureInterval);
+    } else {
+      // Clear interval if auto-capture is disabled
+      if (autoCaptureIntervalRef.current) {
+        clearInterval(autoCaptureIntervalRef.current);
+        autoCaptureIntervalRef.current = null;
+      }
+    }
+    
+    // Cleanup on component unmount or dependency change
+    return () => {
+      if (autoCaptureIntervalRef.current) {
+        clearInterval(autoCaptureIntervalRef.current);
+        autoCaptureIntervalRef.current = null;
+      }
+    };
+  }, [isAutoCapture, isStreamActive, backendStatus, isProcessing, captureInterval]);
   
   const checkBackendConnection = async () => {
     try {
@@ -133,6 +166,13 @@ export const GestureDetector: React.FC<GestureDetectorProps> = ({ onGestureDetec
       videoRef.current.srcObject = null;
     }
     setIsStreamActive(false);
+    setIsAutoCapture(false); // Stop auto-capture when camera is stopped
+    
+    // Clear any running intervals
+    if (autoCaptureIntervalRef.current) {
+      clearInterval(autoCaptureIntervalRef.current);
+      autoCaptureIntervalRef.current = null;
+    }
   };
   
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -159,6 +199,14 @@ export const GestureDetector: React.FC<GestureDetectorProps> = ({ onGestureDetec
   const cancelBuilding = () => {
     setIsBuilding(false);
     setPredictionHistory([]);
+  };
+  
+  const toggleAutoCapture = () => {
+    setIsAutoCapture(!isAutoCapture);
+  };
+  
+  const handleCaptureIntervalChange = (newInterval: number) => {
+    setCaptureInterval(newInterval);
   };
   
   return (
@@ -237,9 +285,16 @@ export const GestureDetector: React.FC<GestureDetectorProps> = ({ onGestureDetec
           </div>
         )}
         
+        {/* Auto-capture Status */}
+        {isAutoCapture && (
+          <div className="absolute top-4 right-4 bg-orange-600 text-white px-3 py-2 rounded-lg">
+            <span>Auto-capturing every {captureInterval / 1000}s</span>
+          </div>
+        )}
+        
         {/* Building Mode Status */}
         {isBuilding && (
-          <div className="absolute top-4 right-4 bg-purple-600 text-white px-3 py-2 rounded-lg">
+          <div className="absolute bottom-4 right-4 bg-purple-600 text-white px-3 py-2 rounded-lg">
             <span>Building: {predictionHistory.join('')}</span>
           </div>
         )}
@@ -255,15 +310,49 @@ export const GestureDetector: React.FC<GestureDetectorProps> = ({ onGestureDetec
       
       {/* Prediction Controls */}
       <div className="mt-4 space-y-4">
-        {/* Camera Capture */}
+        {/* Auto-capture Controls */}
+        <div className="bg-white p-4 rounded-lg border">
+          <h4 className="text-sm font-medium text-gray-900 mb-3">Auto-Capture Settings</h4>
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={toggleAutoCapture}
+              disabled={!isStreamActive || backendStatus !== 'connected'}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                isAutoCapture
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+              } disabled:bg-gray-400 disabled:cursor-not-allowed`}
+            >
+              {isAutoCapture ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              <span>{isAutoCapture ? 'Stop Auto-Capture' : 'Start Auto-Capture'}</span>
+            </button>
+            
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-gray-600">Interval:</label>
+              <select
+                value={captureInterval}
+                onChange={(e) => handleCaptureIntervalChange(Number(e.target.value))}
+                disabled={isAutoCapture}
+                className="px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100"
+              >
+                <option value={500}>0.5s</option>
+                <option value={1000}>1s</option>
+                <option value={2000}>2s</option>
+                <option value={3000}>3s</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        {/* Manual Camera Capture */}
         <div className="flex space-x-2">
           <button
             onClick={captureFromCamera}
-            disabled={!isStreamActive || isProcessing || backendStatus !== 'connected'}
-            className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            disabled={!isStreamActive || isProcessing || backendStatus !== 'connected' || isAutoCapture}
+            className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
             <Camera className="h-4 w-4" />
-            <span>Capture & Predict</span>
+            <span>{isAutoCapture ? 'Auto-Capture Active' : 'Manual Capture'}</span>
           </button>
           
           <button
